@@ -6,10 +6,9 @@ struct Etat  // ATTENTION ON RESOUT EN VAR CONSERVATIVES
 {
 
     friend Etat operator*(double scal, Etat A);
-
-    friend Etat operator+( Etat A, Etat B);
-
-    friend Etat operator-( Etat A, Etat B);
+    friend Etat operator/(Etat A,double scal );
+    friend Etat operator+(Etat A,  const Etat& B);
+    friend Etat operator-( Etat A,  const Etat& B);
 
     double rho;
     double u;
@@ -18,6 +17,11 @@ struct Etat  // ATTENTION ON RESOUT EN VAR CONSERVATIVES
     double E;
 
 };
+
+Etat operator*(double scal, Etat A);
+Etat operator+(Etat A,  const Etat& B);
+Etat operator-(Etat A,  const Etat& B);
+Etat operator/(Etat A,double scal );
 
 
 struct cell_p {
@@ -30,32 +34,6 @@ struct cell_p {
 
 };
 
-struct cell_bord {
-    int ind;
-    double x;
-    double y;
-    Etat prev;
-    Etat next;
-};
-
-struct cell_d {
-    int ind;
-    double x;
-    double y;
-    Etat prev;
-    Etat next;
-
-};
-
-struct cell_d_bord {
-    int ind;
-    double x;
-    double y;
-    Etat prev;
-    Etat next;
-    double mes;
-
-};
 
 
 

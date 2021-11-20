@@ -18,11 +18,11 @@ public:
 
     void uinit(int choice);
 
-    void save(int a);
+    void save(int a, std::string filename);
     int m_nx; // nombre de points en x et y
     int m_ny;
-
     std::vector < std::vector<cell_p> > Primal;
+
 private:
 
     double m_Long;
@@ -30,17 +30,6 @@ private:
 
     double m_dx;
     double m_dy;
-
-    double m_dxd;
-    double m_dyd;
-
-
-    int m_nb_arr;
-    int m_nb_cell_primal;//nombre cellules primales et duales
-    int m_nb_cell_int_prim;
-
-
-
 
 
 };

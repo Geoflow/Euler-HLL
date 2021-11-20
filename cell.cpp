@@ -1,30 +1,38 @@
 #include "cell.h"
 
-Etat operator*(double scal, Etat A) {
-    Etat C;
-    C.rho = scal*A.rho;
-    C.u = scal*A.u;
-    C.v = scal*A.v;
-    C.E = scal*A.E;
-    return C;
+Etat operator*(double scal,  Etat A) {
+
+    A.rho *= scal;
+    A.u *= scal;
+    A.v *= scal;
+    A.E *= scal;
+    return A;
 }
 
-Etat operator+( Etat A,  Etat B) {
-   Etat C;
-    C.rho= A.rho + B.rho;
-    C.u=A.u + B.u;
-    C.v=A.v + B.v;
-   // C.p=A.p + B.p;
-    C.E=A.E + B.E;
-    return C;
+Etat operator+( Etat A,  const Etat& B) {
+ A.rho += B.rho;
+ A.u += B.u;
+ A.v += B.v;
+ //A.p += B.p;
+   A.E +=B.E;
+    return A;
 }
 
-Etat operator-(Etat A, Etat B) {
-    Etat C;
-    C.rho= A.rho - B.rho;
-    C.u=A.u - B.u;
-    C.v=A.v - B.v;
-    //C.p=A.p - B.p;
-    C.E=A.E - B.E;
-    return C;
+Etat operator-(Etat A,  const Etat& B){
+
+     A.rho -= B.rho;
+    A.u -= B.u;
+    A.v -= B.v;
+    //A.p-= B.p;
+    A.E -= B.E;
+    return A;
+}
+
+Etat operator/( Etat A, double scal) {
+
+    A.rho /= scal;
+    A.u /= scal;
+    A.v /= scal;
+    A.E /= scal;
+    return A;
 }

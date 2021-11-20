@@ -6,14 +6,13 @@ OPTIM_FLAG = -O3 -DNDEBUG
 # Options en mode debug - La variable est DEBUG est définie comme vraie
 DEBUG_FLAG = -g -DDEBUG -Wall --leak-check=full 
 
-CXX_FLAGS=$(OPTIM_FLAG)
+CXX_FLAGS= $(OPTIM_FLAG)
 
 # Librairies
 
+LIB=-L/usr/lib -lm -fopenmp 
+INC=-I/usr/include -lm -fopenmp 
 
-#LIB := /usr/local/lib -lblas -llapacke -lgsl -lgslcblas -lm
-#LIBS =  -L$(LIB)
-#LIB = /usr/include
 
 # Le nom de l'exécutable
 PROG = exe
@@ -29,15 +28,15 @@ all : $(PROG)
 #$(PROG) : $(SRC)$(CC) $(SRC) $(CXX_FLAGS) -o $(PROG)
 
 exe : main.o mesh.o euler.o
-	g++  main.cpp mesh.cpp euler.cpp cell.cpp $(CXXFLAGS) -o exe
+	g++  main.cpp mesh.cpp euler.cpp cell.cpp  $(CXXFLAGS) -lm -fopenmp  -o   exe
 main.o : main.cpp mesh.h euler.h 
-	g++ -o main.o -c main.cpp $(CXXFLAGS)  $(LIBS)
+	g++ -o main.o $(LIB) $(INC) -c main.cpp $(CXXFLAGS) -lm -fopenmp 
 cell.o: cell.cpp cell.h
-	g++ -c cell.cpp $(CXXFLAGS) $(LIBS) -o cell.o
+	g++ -c cell.cpp  $^ $(CXXFLAGS)  -o cell.o -lm -fopenmp 
 mesh.o: mesh.cpp mesh.h cell.h
-	g++  -c mesh.cpp $(CXXFLAGS)  $(LIBS) -o mesh.o	
+	g++  -c mesh.cpp $(CXXFLAGS)  -o mesh.o	-lm -fopenmp 
 euler.o: euler.cpp euler.h  
-	g++ -c euler.cpp $(CXXFLAGS) $(LIBS) -o euler.o 
+	g++ -c euler.cpp $(CXXFLAGS)  -o euler.o -lm -fopenmp 
 
 clean :
 	rm *.o exe *.txt

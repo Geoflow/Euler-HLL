@@ -1,4 +1,3 @@
-#include <cstdlib>
 #include <iostream>
 #include <fstream>
 #include "mesh.h"
@@ -14,7 +13,7 @@ Mesh::Mesh() {
 }
 
 
-//Mesh :: ~Mesh() {}
+
 
 Mesh::Mesh(int i, int j, double L, double H) {
 
@@ -22,11 +21,9 @@ Mesh::Mesh(int i, int j, double L, double H) {
     m_ny = j;
     m_Long = L;
     m_Haut = H;
-    m_dx = 2 * m_Long / m_nx ;
-    m_dy = 2 * m_Haut / m_ny ;
+    m_dx =  m_Long / m_nx ;
+    m_dy =  m_Haut / m_ny ;
 
-    m_dxd = m_Long / m_nx;
-    m_dyd = m_Haut / m_ny;
 
 
 
@@ -34,48 +31,40 @@ Mesh::Mesh(int i, int j, double L, double H) {
 
     //--------------PRIMAL MESH-----------------------------------
 
-    for (int i = 0; i < m_nx ; ++i) {
-        for (int j = 0; j < m_ny ; ++j) {
+    for (int i = 1; i < m_nx-1 ; ++i) {
+        for (int j = 1; j < m_ny-1 ; ++j) {
 
             //INTERNAL CELLS--
             Primal[i][j].bord = 0;
-            Primal[i][j].x = -m_Long +(i+0.5) * m_dx;
-            Primal[i][j].y = -m_Haut +j * m_dy;
+            Primal[i][j].x = (i+0.5) * m_dx;//-m_Long +
+            Primal[i][j].y = (j+0.5) * m_dy;//-m_Haut +
 
 
         }
     }
    for (int i = 0; i < m_nx; ++i) {
-        // bottom border
+        //BOTTOM BORDER
         Primal[i][0].bord = 1;
-        Primal[i][0].x = -m_Long + (i+0.5) * m_dx;
-        Primal[i][0].y = -m_Haut+0.5 *m_dy;
-
-    }
-    for (int i = 0; i < m_nx; ++i) {
-        //top border
+        Primal[i][0].x =  (i+0.5) * m_dx;
+        Primal[i][0].y = 0.5 *m_dy;
+        //TOP BORDER
         Primal[i][m_nx - 1].bord = 3;
-        Primal[i][m_nx - 1].x = -m_Long +(i+0.5) * m_dx;
-        Primal[i][m_nx - 1].y = m_Haut -  0.5 *m_dy;
+        Primal[i][m_nx - 1].x = (i+0.5) * m_dx;
+        Primal[i][m_nx - 1].y = m_Haut- 0.5 *m_dy;
 
     }
 
-
     for (int j = 0; j < m_ny; ++j) {
-        //left border
+        //LEFT BORDER
         Primal[0][j].bord = 4;
-        Primal[0][j].x = -m_Long + 0.5 * m_dx;
-        Primal[0][j].y = -m_Haut +j * m_dy;
-
-    }
-    //right border
-    for (int j = 0; j < m_ny; ++j) {
+        Primal[0][j].x =  0.5 * m_dx;
+        Primal[0][j].y = (j+0.5) * m_dy;
+        //RIGHT BORDER
         Primal[m_nx - 1][j].bord = 2;
         Primal[m_nx - 1][j].x = m_Long - 0.5*m_dx;
-        Primal[m_nx - 1][j].y = -m_Haut+ j*m_dy;
+        Primal[m_nx - 1][j].y =  (j+0.5)*m_dy;
 
     }
-
 
     Primal[0][0].bord = 5;
     Primal[m_nx - 1][0].bord = 5;
@@ -84,137 +73,214 @@ Mesh::Mesh(int i, int j, double L, double H) {
 
 
     std::cout << "Primal Mesh Size " << m_nx*m_ny << std::endl;
-    for (unsigned int it = 0; it < Primal[1].size(); it++) {
+    /*for (unsigned int it = 0; it < Primal[1].size(); it++) {
         for (unsigned int j = 0; j < Primal.size(); j++) {
 if(Primal[it][j].bord==5) std::cout << Primal[it][j].x << " " << Primal[it][j].y << "  " << Primal[it][j].bord << std::endl;
         }
-    }
+    }*/
 }
 
 
-
-
-
 double Mesh::getdx() { return m_dx; }
-
 double Mesh::getdy() { return m_dy; }
 
 void Mesh::uinit(int choice) {
 
-    Etat K;
-switch(choice) {
-// TEST CASE NUMERO 3
-    case 3:
-    for (unsigned int it = 0; it < Primal[1].size(); it++) {
-        for (unsigned int j = 0; j < Primal.size(); j++) {
 
-            if (Primal[it][j].x > 0.000000001 && Primal[it][j].y > 0.000000001) {// UPPER RIGHT
-                K.rho = 1.5;
-                K.u = 0.;
-                K.v = 0.;
-                K.p = 1.5;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
+//-------------------------------------------SOD SHOCK -----------------------------------------------------------------
+
+    if (choice == 0) {
+        for (unsigned int it = 0; it < Primal.size(); it++) {
+            for (unsigned int j = 0; j < Primal.size(); j++) {
+
+                if (Primal[it][j].x <= 0.5) {// UPPER RIGHT
+                    Primal[it][j].prev.rho = 1.;
+                    Primal[it][j].prev.u = 0.;
+                    Primal[it][j].prev.v = 0.;
+                    Primal[it][j].prev.p = 1.;
+
+                } else { //UPPER LEFT
+                    Primal[it][j].prev.rho = 0.125;
+                    Primal[it][j].prev.u = 0.;
+                    Primal[it][j].prev.v = 0.;
+                    Primal[it][j].prev.p = 0.1;
+
+
+                }
             }
-            if (Primal[it][j].x < 0.000000001 && Primal[it][j].y > 0.000000001) { //UPPER LEFT
-                K.rho = 0.5323;
-                K.u = 1.206;
-                K.v = 0.;
-                K.p = 0.3;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-
-            }
-            if (Primal[it][j].x < 0.000000001 && Primal[it][j].y < 0.000000001) { //LOWER LEFT
-                K.rho = 0.138;
-                K.u = 1.206;
-                K.v = 1.206;
-                K.p = 0.029;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-
-            }
-
-        if (Primal[it][j].x > 0.000000001 && Primal[it][j].y < 0.000000001) { //LOWER RIGHT
-            K.rho = 0.5323;
-            K.u = 0.;
-            K.v = 1.206;
-            K.p = 0.3;
-            K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-            Primal[it][j].prev = K;
-
-        }
-
-    }
-    }
-    case 4:
-    //----------------------- TEST CASE NUMERO 4------------------------------------------------------------------------
-    for (unsigned int it = 0; it < Primal[1].size(); it++) {
-        for (unsigned int j = 0; j < Primal.size(); j++) {
-
-            if (Primal[it][j].x > 0.000000001 && Primal[it][j].y > 0.000000001) {// UPPER RIGHT
-                K.rho = 1.1;
-                K.u = 0.;
-                K.v = 0.;
-                K.p = 1.1;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-            }
-            if (Primal[it][j].x < 0.000000001 && Primal[it][j].y > 0.000000001) { //UPPER LEFT
-                K.rho = 0.5065;
-                K.u = 0.8939;
-                K.v = 0.;
-                K.p = 0.35;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-            }
-            if (Primal[it][j].x < 0.000000001 && Primal[it][j].y < 0.000000001) { //LOWER LEFT
-                K.rho = 1.1;
-                K.u = 0.8939;
-                K.v = 0.8939;
-                K.p = 1.1;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-            }
-
-            if (Primal[it][j].x > 0.000000001 && Primal[it][j].y < 0.000000001) { //LOWER RIGHT
-                K.rho = 0.5065;
-                K.u = 0.8939;
-                K.v = 0.8939;
-                K.p = 0.35;
-                K.E = K.p / 0.4 + 0.5 * (pow(K.u, 2) + pow(K.v, 2));
-                Primal[it][j].prev = K;
-            }
-
         }
     }
-    }
-std::cout<<"initilisation terminee!"<<std::endl;
+//-------------------------------------TEST CASE NUMERO 3-----------------------------------------------------------
+        if (choice == 3) {
+            for (unsigned int it = 0; it < Primal.size(); it++) {
+                for (unsigned int j = 0; j < Primal.size(); j++) {
 
-}
+                    if (Primal[it][j].x >= 0.4 && Primal[it][j].y >= 0.4 ) {// UPPER RIGHT
+                        Primal[it][j].prev.rho = 1.5;
+                        Primal[it][j].prev.u = 0.;
+                        Primal[it][j].prev.v = 0.;
+                        Primal[it][j].prev.p = 1.5;
 
-void Mesh::save(int a) {
-      std::ofstream outdata;
-        // opens the file
-    //outvalue.open("value.txt");
-    if (a==0){
-        outdata.open("uinit.txt");
+                    }
+                    if (Primal[it][j].x < 0.4 && Primal[it][j].y > 0.4 ) { //UPPER LEFT
+                        Primal[it][j].prev.rho = 0.532258064516129;
+                        Primal[it][j].prev.u = 1.206045378311055;
+                        Primal[it][j].prev.v = 0.;
+                        Primal[it][j].prev.p = 0.3;
 
-    }
-    else if(a==1) {
-        outdata.open("maj.txt");
-    }
+
+                    }
+                    if (Primal[it][j].x <= 0.4 && Primal[it][j].y <= 0.4 ) { //LOWER LEFT
+                        Primal[it][j].prev.rho = 0.137992831541219 ;
+                        Primal[it][j].prev.u = 1.206045378311055;
+                        Primal[it][j].prev.v = 1.206045378311055;
+                        Primal[it][j].prev.p = 0.029032258064516;
+
+
+                    }
+
+                    if (Primal[it][j].x > 0.4 && Primal[it][j].y < 0.4 ) { //LOWER RIGHT
+                        Primal[it][j].prev.rho = 0.532258064516129;
+                        Primal[it][j].prev.u = 0.;
+                        Primal[it][j].prev.v = 1.206045378311055;
+                        Primal[it][j].prev.p = 0.;
+
+
+                    }
+
+                }
+            }
+        }
+
+        if (choice == 4) {
+            //----------------------- TEST CASE NUMERO 4------------------------------------------------------------------------
             for (unsigned int it = 0; it < Primal[1].size(); it++) {
-                for (unsigned int j =0; j < Primal.size(); j++) {
+                for (unsigned int j = 0; j < Primal.size(); j++) {
 
-                        outdata << Primal[it][j].x << "  " << Primal[it][j].y << "  " <<Primal[it][j].prev.rho<< \
-                        "  "<<Primal[it][j].prev.u/Primal[it][j].prev.rho<<"  " <<Primal[it][j].prev.p<<"  " <<Primal[it][j].prev.E<< std::endl;
+                    if (Primal[it][j].x > 0.4 && Primal[it][j].y > 0.4 ) {// UPPER RIGHT
+                        Primal[it][j].prev.rho = 1.1;
+                        Primal[it][j].prev.u = 0.;
+                        Primal[it][j].prev.v = 0.;
+                        Primal[it][j].prev.p = 1.1;
+
+                    }
+                    if (Primal[it][j].x < 0.4 && Primal[it][j].y > 0.4 ) { //UPPER LEFT
+                        Primal[it][j].prev.rho = 0.5065;
+                        Primal[it][j].prev.u = 0.8939;
+                        Primal[it][j].prev.v = 0.;
+                        Primal[it][j].prev.p = 0.35;
+
+                    }
+                    if (Primal[it][j].x < 0.4 && Primal[it][j].y < 0.4 ) { //LOWER LEFT
+                        Primal[it][j].prev.rho = 1.1;
+                        Primal[it][j].prev.u = 0.8939;
+                        Primal[it][j].prev.v = 0.8939;
+                        Primal[it][j].prev.p = 1.1;
+
+                    }
+
+                    if (Primal[it][j].x > 0.4 && Primal[it][j].y < 0.4 ){ //LOWER RIGHT
+                        Primal[it][j].prev.rho = 0.5065;
+                        Primal[it][j].prev.u = 0.;
+                        Primal[it][j].prev.v = 0.8939;
+                        Primal[it][j].prev.p = 0.35;
+
+
+                    }
+
+                }
+            }
+        }
+
+    if (choice == 6) {
+        //----------------------- TEST CASE NUMERO 6------------------------------------------------------------------------
+        for (unsigned int it = 0; it < Primal[1].size(); it++) {
+            for (unsigned int j = 0; j < Primal.size(); j++) {
+
+                if (Primal[it][j].x > 0.5 && Primal[it][j].y > 0.5 ) {// UPPER RIGHT
+                    Primal[it][j].prev.rho = 1.;
+                    Primal[it][j].prev.u = .75;
+                    Primal[it][j].prev.v = -.5;
+                    Primal[it][j].prev.p = 1.;
+
+                }
+                if (Primal[it][j].x < 0.5 && Primal[it][j].y > 0.5 ) { //UPPER LEFT
+                    Primal[it][j].prev.rho = 2.;
+                    Primal[it][j].prev.u = 0.75;
+                    Primal[it][j].prev.v = 0.5;
+                    Primal[it][j].prev.p = 1.;
+
+                }
+                if (Primal[it][j].x < 0.5 && Primal[it][j].y < 0.5 ) { //LOWER LEFT
+                    Primal[it][j].prev.rho = 1.;
+                    Primal[it][j].prev.u = -.75;
+                    Primal[it][j].prev.v = .5;
+                    Primal[it][j].prev.p = 1.;
+
+                }
+
+                if (Primal[it][j].x > 0.5 && Primal[it][j].y < 0.5 ){ //LOWER RIGHT
+                    Primal[it][j].prev.rho = 3.;
+                    Primal[it][j].prev.u = 1.;
+                    Primal[it][j].prev.v = -.75;
+                    Primal[it][j].prev.p = -.5;
+
 
                 }
 
             }
+        }
+    }
 
-       outdata.close();
+ //---------------------------------------------------------------------------------------------------------------------
+ //---------------------------VARIABLES CONSERVATIVES-------------------------------------------------------------------
+    for (unsigned int it = 0; it < Primal[1].size(); it++) {
+        for (unsigned int j = 0; j < Primal.size(); j++) {
+            Primal[it][j].prev.E = Primal[it][j].prev.p / 0.4 +0.5*Primal[it][j].prev.rho * (pow(Primal[it][j].prev.u, 2) + pow(Primal[it][j].prev.v, 2));//OK DONT TOUCH
+            Primal[it][j].prev.u *= Primal[it][j].prev.rho ;
+            Primal[it][j].prev.v *= Primal[it][j].prev.rho ;
+          Primal[it][j].prev.E*= Primal[it][j].prev.rho ;
+
+
+        }
+        }
+        std::cout << "initilisation terminee!" << std::endl;
 }
 
-//---------------------------------------------------------------------
+void Mesh::save(int a, std::string filename) {
+
+      std::ofstream outdata;
+      std::string nom_init;
+      nom_init="init_"+filename+".txt";
+      std::string nom_maj;
+      nom_maj="maj_"+filename+".txt";
+
+    switch (a)
+    {
+    case 0:
+        outdata.open(nom_init);
+            for (unsigned int it = 0; it < Primal.size(); it++) {
+                for (unsigned int j =0; j < Primal.size(); j++) {
+
+                    outdata << Primal[it][j].x << " " << Primal[it][j].y << " " <<Primal[it][j].prev.rho<< \
+                        "  "<<Primal[it][j].prev.u/Primal[it][j].prev.rho<<" " <<Primal[it][j].prev.p<<" " <<Primal[it][j].prev.E<< std::endl;
+
+                }
+
+            }
+            outdata.close();
+    case 1:
+        outdata.open(nom_maj);
+            for (unsigned int it = 0; it < Primal.size(); it++) {
+                for (unsigned int j =0; j < Primal.size(); j++) {
+
+                    outdata << Primal[it][j].x << " " << Primal[it][j].y << " " <<Primal[it][j].prev.rho<< \
+                        " "<<Primal[it][j].prev.u/Primal[it][j].prev.rho<<" " <<Primal[it][j].prev.p<<" " <<Primal[it][j].prev.E/Primal[it][j].prev.rho<< std::endl;
+
+                }
+
+            }
+            outdata.close();
+    }
+}
+
