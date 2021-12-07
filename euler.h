@@ -7,7 +7,7 @@
 #include <utility>
 #include <algorithm>
 
-const double gama = 1.4;
+
 
 class Euler {
 public:
@@ -30,11 +30,9 @@ private:
 
     Etat FHLL(const Etat& WL, const Etat& WR, double lamin=0., double lamax=0.);
 
-    Etat GHLL(const Etat& WD, const Etat& WU,double lamin=0., double lamax=0.);
+    Etat GHLL(const Etat& WD, const Etat& WU, double lamin=0., double lamax=0.);
 
-    Etat FUPWIND(const Etat& WLD, const Etat& WLU, const Etat& WRD, const Etat& WRU) ;
-
-    Etat GUPWIND(const Etat& WLD, const Etat& WLU, const Etat& WRD, const Etat& WRU) ;
+    std::pair<Etat, Etat> UPWIND(const Etat& WLD, const Etat& WLU, const Etat& WRD, const Etat& WRU) ;
 
     std::pair<Etat,Etat>  HLLMULTID(const Etat& WLD, const Etat& WLU, const Etat& WRD, const Etat& WRU) ;
 
@@ -50,7 +48,8 @@ private:
     double T{0.};
     double Tmax{0.};
     double dt{0.};
-    int solver_choice;
+   double alpha;
+    const double gama = 1.4;
     std::vector<double> Wave;
     std::vector < std::vector<double> > slope_x, slope_y;
 };

@@ -236,7 +236,7 @@ void Mesh::uinit(int choice) {
  //---------------------------VARIABLES CONSERVATIVES-------------------------------------------------------------------
     for (unsigned int it = 0; it < Primal[1].size(); it++) {
         for (unsigned int j = 0; j < Primal.size(); j++) {
-            Primal[it][j].prev.E = Primal[it][j].prev.p / 0.4 +0.5*Primal[it][j].prev.rho * (pow(Primal[it][j].prev.u, 2) + pow(Primal[it][j].prev.v, 2));//OK DONT TOUCH
+            Primal[it][j].prev.E = Primal[it][j].prev.p / 0.4 +0.5*(pow(Primal[it][j].prev.u, 2) + pow(Primal[it][j].prev.v, 2));//OK DONT TOUCH
             Primal[it][j].prev.u *= Primal[it][j].prev.rho ;
             Primal[it][j].prev.v *= Primal[it][j].prev.rho ;
           Primal[it][j].prev.E*= Primal[it][j].prev.rho ;

@@ -4,13 +4,15 @@
 
 int main() {
 
-    Mesh Maillage(128,128, 1., 1.);
-    Maillage.uinit(4);
+    Mesh Maillage(100,100, 1., 1.);
+    Maillage.uinit(3);
     Euler PB(Maillage);
-//PB.LF_Solver(0.3, 3);
-//PB.HLL_SPLIT(0.32, 4);
-PB.HLL_Solver(0.001, 4);
-//PB.UPWIND_Solver(0.05, 0);
+//PB.LF_Solver(0.16, 3); //OK
+//PB.UPWIND_Solver(0.16, 3);//OK
+PB.HLL_SPLIT(0.08, 3); //not OK
+
+//PB.HLL_Solver(0.002, 3);
+
     return 0;
 }
 
