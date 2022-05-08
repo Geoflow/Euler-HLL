@@ -5,8 +5,9 @@
 #include <iostream>
 #include <utility>
 #include <algorithm>
-
-
+//#include <armadillo>
+#include <stdlib.h>
+#include <eigen3/Eigen/Dense>
 Etat Euler::F(const Etat& W) {
 
     Etat Fx;
@@ -25,7 +26,7 @@ Etat Euler::G(const  Etat& W) {
     Etat Gy;
 
     Gy.rho = W.v;
-    Gy.u =  W.u/W.rho * W.v;;
+    Gy.u =  W.u/W.rho * W.v;
     Gy.v = pow(W.v, 2)/W.rho + W.p;
     Gy.E = ( W.v/W.rho)* (W.E + W.p );
 
@@ -34,28 +35,34 @@ Etat Euler::G(const  Etat& W) {
 
 //---------------------------STAR FLUXES-------------------------------------------------------------
 
-Etat Euler::F_star(const Etat& W) {
+Etat Euler::F_star(const Etat& W,const Etat& GW){
+    //GW.p=0.4 * (GW.E -0.5 *GW.rho *(pow(GW.u /GW.rho,2)+ pow(GW.v /GW.rho, 2)));
+  //  std::cout<<" rho "<<W.rho<<" .u "<<W.u<<" p  "<<W.p <<" E  "<<W.E<<std::endl;
 
     Etat Fx;
-
-    Fx.rho = W.u;
-    Fx.u =  pow(W.v, 2)/W.rho + W.p+ (pow(W.u, 2)-pow(W.v, 2))/W.rho;
-    Fx.v = W.u * W.v/W.rho;
-    Fx.E = W.u*(W.E + W.p )*(W.u/W.rho)/W.v;
+    if(W.rho !=0 && W.v !=0) {
+        Fx.rho = W.u;
+        Fx.u = G(W).v + (pow(W.u / W.rho, 2) - pow(W.v / W.rho, 2));
+        Fx.v = W.u * W.v / W.rho;
+        Fx.E =W.u * G(W).E / W.v;
+    }
+    else{Fx=GW;}
 
     return Fx;
 }
 
 
-Etat Euler::G_star(const  Etat& W) {
+Etat Euler::G_star(const Etat& W, const Etat& FW) {
+    //FW.p=0.4 * (FW.E -0.5 *FW.rho *(pow(FW.u /FW.rho,2)+ pow(FW.v /FW.rho, 2)));
+   Etat Gy;
 
-    Etat Gy;
-
+    if(W.rho !=0 && W.u !=0) {
     Gy.rho = W.v;
-    Gy.u =  W.u * W.v/W.rho;;
-    Gy.v = pow(W.u, 2)/W.rho + W.p+ (pow(W.u, 2)-pow(W.v, 2))/W.rho;
-    Gy.E = ( W.v/W.rho)* (W.E + W.p )*(W.v/W.rho)/W.u;
-
+    Gy.u =  W.u * W.v/W.rho;
+    Gy.v =F(W).u+ (pow(W.v, 2)-pow(W.u, 2))/W.rho;
+    Gy.E =  W.v*F(W).E/W.u;
+    }
+    else{Gy=FW;}
     return Gy;
 }
 
@@ -65,12 +72,8 @@ void Euler::Pressure(){
 #pragma omp parallel for collapse(2)
             for (unsigned int it = 0; it < m_mesh.m_nx; it++) {
                 for (int j = 0; j < m_mesh.m_ny; ++j) {
-                   if(m_mesh.Primal[it][j].next.rho >=0. && m_mesh.Primal[it][j].next.E>=0.){
-                        m_mesh.Primal[it][j].next.p =std::max(0., 0.4 * (m_mesh.Primal[it][j].next.E -0.5 *m_mesh.Primal[it][j].next.rho *
-                         (pow(m_mesh.Primal[it][j].next.u /m_mesh.Primal[it][j].next.rho,2)+ pow(m_mesh.Primal[it][j].next.v /m_mesh.Primal[it][j].next.rho, 2))));
-
-                       }else {m_mesh.Primal[it][j].next.p =0.;}
-
+                       m_mesh.Primal[it][j].next.p = std::max(0., 0.4 * (m_mesh.Primal[it][j].next.E -0.5 * m_mesh.Primal[it][j].next.rho *
+                       (pow(m_mesh.Primal[it][j].next.u / m_mesh.Primal[it][j].next.rho, 2) +pow(m_mesh.Primal[it][j].next.v /m_mesh.Primal[it][j].next.rho, 2))));
                 }
             }
 }
@@ -78,40 +81,37 @@ void Euler::Pressure(){
 
 Etat Euler::FHLL(const Etat &WL, const Etat &WR, double lamin, double lamax) {
     Etat WF;
+ // lamin =std::min(WR.u/WR.rho-sqrt(1.4*WR.p/WR.rho),WL.u / WL.rho - sqrt(gama * WL.p / WL.rho));
+ // lamax =std::max(WR.u/WR.rho+sqrt(1.4*WR.p/WR.rho),WL.u / WL.rho + sqrt(gama * WL.p / WL.rho));
+   lamin =WL.u / WL.rho - sqrt(gama * WL.p / WL.rho);
+    lamax =WR.u/WR.rho+sqrt(1.4*WR.p/WR.rho);
 
-        lamin = std::min(WR.u / WR.rho - sqrt(gama * WR.p / WR.rho),
-                         WL.u / WL.rho - sqrt(gama * WL.p / WL.rho));//WL.u/WL.rho- sqrt((1.4*WL.p)/WL.rho)
-        lamax = std::max(WR.u / WR.rho + sqrt(gama * WR.p / WR.rho),
-                         WL.u / WL.rho + sqrt(gama * WL.p / WL.rho));//WR.u/WR.rho+sqrt((1.4*WR.p)/WR.rho);
-
-
-    if (lamin < 0. && 0. < lamax)
+     if (lamin < 0. && 0. < lamax)
     {
-       //  WF=1./(lamax-lamin)*(lamax*F(WL)-lamin*F(WR)+lamin*lamax*(WR-WL));
-        WF=0.5*(F(WR)+F(WL))-0.5*(lamin+lamax)/(lamax-lamin)*(F(WR)+F(WL))+(lamin*lamax)/(lamax-lamin)*(WR-WL);
+       WF=(lamax*F(WL)-lamin*F(WR)+lamin*lamax*(WR-WL))/(lamax-lamin);
+
     }
 
-        if (0. <= lamin) { WF = F(WL); }
-        if (lamax <= 0.) { WF = F(WR); }
-
-    return WF;
+   if (0. <= lamin) { WF = F(WL);     }
+   if (lamax <= 0.) { WF = F(WR);     }
+   return WF;
 }
 
 
 Etat Euler::GHLL(const Etat &WD, const Etat &WU, double lamin, double lamax) {
     Etat WG;
-    lamin= std::min(WU.v/ WU.rho  - sqrt(gama * WU.p / WU.rho),WD.v/ WD.rho  -sqrt(gama * WD.p / WD.rho));// WD.v/WD.rho- sqrt((1.4*WD.p)/WD.rho);
-    lamax=std::max(WU.v/ WU.rho + sqrt(gama * WU.p / WU.rho),WD.v/ WD.rho  +sqrt(gama * WD.p / WD.rho));//WU.v/WU.rho+sqrt((1.4*WU.p)/WU.rho);
+   // lamin= std::min(WU.v/ WU.rho  - sqrt(gama * WU.p / WU.rho),WD.v/ WD.rho  -sqrt(gama * WD.p / WD.rho));
+   // lamax=std::max(WU.v/ WU.rho + sqrt(gama * WU.p / WU.rho),WD.v/ WD.rho  +sqrt(gama * WD.p / WD.rho));
+    lamin= WD.v/ WD.rho  -sqrt(gama * WD.p / WD.rho);
+    lamax=WU.v/ WU.rho + sqrt(gama * WU.p / WU.rho);
 
     if (lamin < 0. && 0. < lamax)
     {
-       // WG=1./(lamax-lamin)*(lamax*G(WD)-lamin*G(WU)+lamin*lamax*(WU-WD));
-        WG=0.5*(G(WU)+G(WD))-0.5*(lamin+lamax)/(lamax-lamin)*(G(WU)+G(WD))+(lamin*lamax)/(lamax-lamin)*(WU-WD);
+        WG=(lamax*G(WD)-lamin*G(WU)+lamin*lamax*(WU-WD))/(lamax-lamin);
 
     }
     if (0. <= lamin) {  WG=G(WD); }
     if (lamax <= 0.) {  WG=G(WU); }
-
     return WG;
 }
 
@@ -142,25 +142,25 @@ std::pair<Etat, Etat> Euler::UPWIND(const Etat &WLD, const Etat &WLU, const Etat
 
 
 
-    if (0. < SL && 0. < SD)
+    if (0. <= SL && 0. <= SD)
     {
             FUP=F(WLD);
             GUP=G(WLD);
     }
 
-    else if(0. < SL && SU < 0.)
+    else if(0. <= SL && SU <= 0.)
     {
             FUP=F(WLU);
             GUP=G(WLU);
     }
 
 
-    else if (SR < 0. && 0. < SD)
+    else if (SR <= 0. && 0. <= SD)
     {
         FUP=F(WRD);
         GUP=G(WRD);
     }
-    else if(SR < 0. && SU < 0.)
+    else if(SR <= 0. && SU <= 0.)
     {
         FUP=F(WRU);
         GUP=G(WRU);
@@ -168,7 +168,7 @@ std::pair<Etat, Etat> Euler::UPWIND(const Etat &WLD, const Etat &WLU, const Etat
     else{
 
       FUP=0.5*(FHLL(WLD,WRD)+FHLL(WLU,WRU));
-       GUP=0.5*(GHLL(WLD,WLU)+GHLL(WRD,WRU));
+      GUP=0.5*(GHLL(WLD,WLU)+GHLL(WRD,WRU));
       // FUP=0.25 * (F(WLU) + F(WRU))-0.25 * m_mesh.getdx() / dt * (WRU - WLU)+0.25 * (F(WLD) + F(WRD))-0.25 * m_mesh.getdx() / dt * (WRD - WLD);
        //GUP= 0.25 * (G(WLD) + G(WLU))-0.25 * m_mesh.getdy() / dt *(WLU- WLD)+ 0.25 * (G(WRD) + G(WRU))-0.25 * m_mesh.getdy() / dt *(WRU -WRD);
 
@@ -178,117 +178,117 @@ std::pair<Etat, Etat> Euler::UPWIND(const Etat &WLD, const Etat &WLU, const Etat
 
 //--------------------------------------------MULTIDIMENSIONNAL HLL---------------------------
 
-std::pair<Etat, Etat> Euler::HLLMULTID(const Etat &WLD, const Etat &WLU, const Etat &WRD, const Etat &WRU) {
 
-    Etat Wstar;
-    Etat Fstar;
-    Etat Gstar;
-    Etat UD, UR, UU, UL;
+
+std::pair<Etat, Etat> Euler::HLL_MULTID(const Etat &WLD, const Etat &WLU, const Etat &WRD, const Etat &WRU)
+{
+
+    Etat Wstar, Fstar, Gstar;
+    double u_r,c_r,u_l, c_l, u_bot, c_bot, u_top, c_top;
+    std::vector<double> tmp;
+    
+    Etat UD, UR, UU, UL, FUD, FUU, GUL, GUR;
 //---------------------------------WAVES SPEEDS-------------
-/*
 //-------------------RIGHT PB-------------------------------
-    SRD = WRD.v/ WRD.rho  - sqrt(gama * WRD.p / WRD.rho);
-    SRU = WRU.v/ WRU.rho + sqrt(gama * WRU.p / WRU.rho);
+    u_r=(WRD.v*sqrt(WRD.rho)+WRU.v*sqrt(WRU.rho))/(sqrt(WRD.rho)+sqrt(WRU.rho));
+    c_r=sqrt( ((gama*WRD.p/sqrt(WRD.rho))+(gama*WRU.p/sqrt(WRU.rho)))/(sqrt(WRD.rho)+sqrt(WRU.rho))+\
+    0.5*(sqrt(WRD.rho*WRU.rho)/pow(sqrt( WRU.rho)+sqrt( WRD.rho),2))*pow(WRU.v-WRD.v,2));
+    
+    SRD = std::min(WRD.v/ WRD.rho - sqrt(gama * WRD.p / WRD.rho), u_r-c_r);
+    SRU = std::max(WRU.v/ WRU.rho + sqrt(gama * WRU.p / WRU.rho), u_r+c_r);
+    
 //-------------------LEFT PB--------------------------------
-    SLD = WLD.v/ WLD.rho  - sqrt(gama * WLD.p / WLD.rho);
-    SLU = WLU.v/ WLU.rho  + sqrt(gama * WLU.p / WLU.rho);
+
+    u_l=(WLD.v*sqrt(WLD.rho)+WLU.v*sqrt(WLU.rho))/(sqrt(WLD.rho)+sqrt(WLU.rho));
+    c_l=sqrt( ((gama*WLD.p/sqrt(WLD.rho))+(gama*WLU.p/sqrt(WLU.rho)))/(sqrt(WLD.rho)+sqrt(WLU.rho))+\
+    0.5*(sqrt(WLD.rho*WLU.rho)/pow(sqrt( WLD.rho)+sqrt( WLD.rho),2))*pow(WLU.v-WLD.v,2));
+
+    SLD = std::min(WLD.v/ WLD.rho  - sqrt(gama * WLD.p / WLD.rho), u_l-c_l);
+    SLU = std::max(WLU.v/ WLU.rho  + sqrt(gama * WLU.p / WLU.rho), u_l+c_l);
+    
 //--------------------BOT PB--------------------------------
-    SDR = WRD.u/ WRD.rho + sqrt(gama * WRD.p / WRD.rho);
-    SDL = WLD.u/ WLD.rho  - sqrt(gama * WLD.p / WLD.rho);
+       
+     u_bot=(WLD.u*sqrt( WLD.rho)+WRD.u*sqrt( WRD.rho))/(sqrt( WLD.rho)+sqrt( WRD.rho));
+     c_bot=sqrt((gama * WLD.p /sqrt(WLD.rho)+(gama * WRD.p / sqrt(WRD.rho)))/(sqrt( WLD.rho)+sqrt( WRD.rho))+\
+    0.5*((sqrt( WLD.rho*WRD.rho))/pow(sqrt( WLD.rho)+sqrt( WRD.rho),2))*pow(WRD.u-WLD.u,2));
+     
+    SDL =std::min( WLD.u/ WLD.rho - sqrt(gama * WLD.p / WLD.rho), u_bot-c_bot);
+    SDR =std::max( WRD.u/ WRD.rho + sqrt(gama * WRD.p / WRD.rho), u_bot+c_bot) ;
+
 //-------------------TOP PB---------------------------------
-    SUR = WRU.u/ WRU.rho  + sqrt(gama * WRU.p / WRU.rho);
-    SUL = WLU.u/ WLU.rho - sqrt(gama * WLU.p / WLU.rho);
-*/
-//-------------------RIGHT PB-------------------------------
-    SRD =std::min(WRD.v/ WRD.rho  - sqrt(gama * WRD.p / WRD.rho), WRU.v/ WRU.rho - sqrt(gama * WRU.p / WRU.rho));
-    SRU =std::max(WRD.v/ WRD.rho  + sqrt(gama * WRD.p / WRD.rho), WRU.v/ WRU.rho + sqrt(gama * WRU.p / WRU.rho));
-//-------------------LEFT PB--------------------------------
-    SLD =std::min( WLD.v/ WLD.rho  - sqrt(gama * WLD.p / WLD.rho),WLU.v/ WLU.rho  -sqrt(gama * WLU.p / WLU.rho));
-    SLU = std::max(WLU.v/ WLU.rho  + sqrt(gama * WLU.p / WLU.rho),WLD.v/ WLD.rho  +sqrt(gama * WLD.p / WLD.rho));
-//--------------------BOTTOM PB-----------------------------
+        
+    u_top=(WLU.u*sqrt( WLU.rho)+WRU.u*sqrt( WRU.rho))/(sqrt( WLU.rho)+sqrt( WRU.rho));
+    c_top=sqrt((gama * WLU.p /sqrt(WLU.rho)+(gama * WRU.p / sqrt(WRU.rho)))/(sqrt( WLU.rho)+sqrt( WRU.rho))+\
+    0.5*((sqrt( WLU.rho*WRU.rho))/pow(sqrt( WLU.rho)+sqrt( WRU.rho),2))*pow(WRU.u-WLU.u,2));
+    
+    SUL =std::min( WLU.u/ WLU.rho - sqrt(gama * WLU.p / WLU.rho), u_top-c_top);
+    SUR =std::max( WRU.u/ WRU.rho + sqrt(gama * WRU.p / WRU.rho), u_top+c_top);
+    
+//-------------------------------------------------------------
 
-    SDL = std::min(WLD.u/ WLD.rho  - sqrt(gama * WLD.p / WLD.rho),WRD.u/ WRD.rho - sqrt(gama * WRD.p / WRD.rho));
-    SDR =std::max( WRD.u/ WRD.rho + sqrt(gama * WRD.p / WRD.rho),WLD.u/ WLD.rho +sqrt(gama * WLD.p / WLD.rho));
-//-------------------TOP PB---------------------------------
-    SUR = std::max(WRU.u/ WRU.rho  + sqrt(gama * WRU.p / WRU.rho),WLU.u/ WLU.rho + sqrt(gama * WLU.p / WLU.rho));
-    SUL = std::min(WLU.u/ WLU.rho - sqrt(gama * WLU.p / WLU.rho),WRU.u/ WRU.rho  -sqrt(gama * WRU.p / WRU.rho));
+    SR = std::max(SRU, SRD);
+    SL = std::min(SLD, SLU);
+    SU = std::max(SUL, SUR);
+    SD = std::min(SDL, SDR);
+	tmp = {abs(SD),abs(SU),abs(SL),abs(SR)};
+    const auto max = std::max_element(begin(tmp), end(tmp));
+    Wave.push_back(*max);
+#pragma omp parallel num_threads(10) shared(Wstar,Fstar, Gstar)
 
+    if (SL <= 0. && 0. <= SR && SD <= 0. &&  0. <= SU) // strong interaction state straddles time axis
 
-    SR = std::max(SDR, SUR);
-    SL = std::min(SDL, SUL);
-    SU = std::max(SLU, SRU);
-    SD = std::min(SRD, SLD);
-
-
-
-
-    if (SL <= 0. && SR >= 0. && SD <= 0. && SU >= 0.)
-    { // strong interaction state straddles time axis
-
-//----------------------------------------STAR STATES-----------------------------------------------------------------
-        UD =  (SDR*WRD-SDL*WLD + F(WRD) - F(WLD))/ (SDR - SDL);
-        UD.p=0.4 *UD.E -0.5*UD.rho*(pow(UD.u/UD.rho, 2)+ pow(UD.v/UD.rho, 2));
-
-        UR =   (SRU*WRU-SLD*WRD +G(WRU) - G(WRD))/(SRU - SRD);
-        UR.p=0.4 *UR.E -0.5*UR.rho*(pow(UR.u/UR.rho, 2)+ pow(UR.v/UR.rho, 2)) ;
-
-        UU = (SUR*WRU-SUL*WLU + F(WRU) - F(WLU))/ (SUR - SUL);
-        UU.p=0.4 *UU.E -0.5*UU.rho*(pow(UU.u/UU.rho, 2)+ pow(UU.v/UU.rho, 2));
-
-        UL = (SLU*WLU-SLD*WLD + G(WLU) - G(WLD)) / (SLU - SLD);
-        UL.p=0.4 *UL.E -0.5*UL.rho*(pow(UL.u/UL.rho, 2)+ pow(UL.v/UL.rho, 2));
-
-//--------------------------------------------------------------------------------------------------------------------
-
-        Wstar = (1. / ((SR - SL) * (SU - SD))) * (SR * SU * WRU + SL * SD * WLD - SR * SD * WRD - SL * SU * WLU) \
- - (1. / (2 * (SR - SL) * (SU - SD))) *
-   (SU * (F(WRU) - F(WLU)) - SD * (F(WRD) - F(WLD)) + SR * (G(WRU) - G(WRD)) - SL * (G(WLU) - G(WLD))) \
- + (SRU * (F(WRU) - F_star(UR)) - SRD * (F(WRD) - F_star(UR)) - SLU * (F(WLU) - F_star(UL)) + SLD * (F(WLD) - F_star(UL))) +
-            (1. / (2 * (SR - SL) * (SU - SD)))\
- * (SUR * (G(WRU) - G_star(UU)) - SUL * (G(WLU) - G_star(UU)) - SDR * (G(WRD) - G_star(UD)) + SDL * (G(WRD) - G_star(UD)));
-
-//--------------------------------------------------------------------------------------------------------------------
-
-        Fstar = 2. * SR * Wstar - (SU / (SU - SD)) * FHLL(WLU, WRU) +
-                (SD / (SU - SD)) * FHLL(WLD, WLU)
- + (2. / (SU - SD)) * (SU * F(WRU) - SD * F(WRD) + SR * (G(WRU) - G(WRD)) - SR * (SU * WRU - SD * WRD))
- + (1. / (SU - SD)) *(std::max(SRD, 0.) * (F(WRD) - F_star(UR)) - SRU * (F(WRU) - F_star(UR)) - std::max(SUR, 0.) * (G(WRU) - G_star(UU))
- + std::max(SLU, 0.) * (G(WLU) - G_star(UU)) + std::max(SDR, 0.) * (G(WRD) - G_star(UD)) - std::max(SLD, 0.) * (G(WLD) - G_star(UD)));
-
-        Gstar = 2. * SU * Wstar - SR/ (SR - SL) * GHLL(WRD, WRU) +SL/ (SR - SL)* GHLL(WLD, WLU)
- +  (2. / (SU - SD))* (SR * G(WRU) - SL * G(WLU) + SU * (F(WRU) - F(WLU)) - SU * (SR * WRU - SL * WLU))
- + (1. / (SU - SD)) * (SLU * (G(WLU) - G_star(UU)) - SUR * (G(WRU) - G_star(UU)) - std::max(SRU, 0.) * (F(WRU) - F_star(UR))
- + std::max(SRD, 0.) * (F(WRD) - F_star(UR)) + std::max(SLU, 0.) * (F(WLU) - F_star(UL)) - std::max(SLD, 0.) * (F(WLD) - F_star(UL)));
-
-    } if (((SL >= 0. && SR >= 0.) || (SL <= 0. && SR <= 0.)) &&((SU >= 0. && SD >= 0.) || (SU <= 0. && SD <= 0.)))  // both x,y supersonic
     {
+      // ---------------------------------BALSARA APPROXIMATION
+ //--------------------------------------------------------------------------------------------------------------------
+
+    Wstar =  (SR * SU * WRU + SL * SD * WLD - SR * SD * WRD - SL * SU * WLU)/( (SR - SL) * (SU - SD))
+            -  (SU * (F(WRU) - F(WLU)) - SD * (F(WRD) - F(WLD)) + SR * (G(WRU) - G(WRD)) - SL * (G(WLU) - G(WLD)))/((SR - SL) * (SU - SD))
+            + 0.5*(SRU * (F(WRU) - F_star(UR,GUR)) - SRD * (F(WRD) - F_star(UR,GUR)) - SLU * (F(WLU) - F_star(UL,GUL))
+            + SLD * (F(WLD) - F_star(UL,GUL)))/( (SR - SL) * (SU - SD))
+            +0.5* (SUR * (G(WRU) - G_star(UU,FUU)) - SUL * (G(WLU) - G_star(UU,FUU)) - SDR * (G(WRD) - G_star(UD,FUD)) +
+            SDL * (G(WLD) - G_star(UD,FUD)))/( (SR - SL) * (SU - SD));
+
+//--------------------------------------------------------------------------------------------------------------------
+
+    Fstar= 2. * SR * Wstar - (SU * FHLL(WLU, WRU)-SD* FHLL(WLD, WRD))/ (SU - SD)
+           + 2.  * (SU * F(WRU) - SD * F(WRD) + SR * (G(WRU) - G(WRD)) - SR * (SU * WRU - SD * WRD))/ (SU - SD)
+           + (SRD * (F(WRD) - F_star(UR,GUR)) - SRU * (F(WRU) - F_star(UR,GUR)) - std::max(SUR, 0.) * (G(WRU) - G_star(UU,FUU))
+              + std::max(SUL, 0.) * (G(WLU) - G_star(UU,FUU))+ std::max(SDR, 0.) * (G(WRD) - G_star(UD,FUD))
+              - std::max(SDL, 0.) * (G(WLD) - G_star(UD,FUD)))/(SU - SD);
+
+    Gstar=2. * SU * Wstar -(SR * GHLL(WRD, WRU) -SL* GHLL(WLD, WLU))/ (SR - SL)
+          +  2. * (SR * G(WRU) - SL * G(WLU) + SU * (F(WRU) - F(WLU)) - SU * (SR * WRU - SL * WLU))/ (SR - SL)
+          +   (SUL * (G(WLU) - G_star(UU,FUU)) - SUR * (G(WRU) - G_star(UU,FUU)) - std::max(SRU, 0.) * (F(WRU) - F_star(UR,GUR))
+          + std::max(SRD, 0.) * (F(WRD) - F_star(UR,GUR)) + std::max(SLU, 0.)* (F(WLU) - F_star(UL,GUL))
+          - std::max(SLD, 0.) * (F(WLD) -F_star(UL,GUL)))/ (SR - SL);
+//------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------
+       
+       
+    }
+   else if (((SL >= 0. && SR >= 0.) || (SL <= 0. && SR <= 0.)) &&((SU >= 0. && SD >= 0.) || (SU <= 0. && SD <= 0.)))
+    {// both x,y supersonic
         Fstar = UPWIND(WLD, WLU, WRD, WRU).first;
         Gstar = UPWIND(WLD, WLU, WRD, WRU).second;
-
-    }  if ((SD <= 0. && SU >= 0.) && (SL >= 0. || SR <= 0.))
+    }
+    else if ((SD <= 0. && SU >= 0.) && (SL >= 0. || SR <= 0.))
     { //x supersonic, y subsonic
         Fstar = (SU * FHLL(WLD, WRD) - SD * FHLL(WLU, WRU))/ (SU - SD);
-        if (SL > 0.)
-        {
-            Gstar = GHLL(WLU, WRU);//GHLL(WLU, WRU, SUL, SUR);
-        } else if (SR < 0.)
-        {
-            Gstar = GHLL(WRD, WLD);//GHLL(WRD, WLD, SDL, SDR);
-        }
+        if (SL >= 0.)
+        {            Gstar = GHLL(WLD, WLU);}
+        else if (SR <= 0.)
+        {         Gstar = GHLL(WRD, WRU); }
     }
-    if ((SL <= 0. && SR >= 0.) && (SD >= 0. || SU <= 0.))
+    else if ((SL <= 0. && SR >= 0.) && (SD >= 0. || SU <= 0.))
     {//x subsonic, y supersonic
-        Gstar =(SR * GHLL(WLD, WLU) - SL * GHLL(WRD, WRU)) / (SR - SL);
+            Gstar =(SR * GHLL(WLD, WLU) - SL * GHLL(WRD, WRU)) / (SR - SL);
 
-        if (SD > 0.)
-        {
-            Fstar =FHLL(WLD, WRD);// FHLL(WLD, WRD, SDL, SDR);
-        } else if (SU < 0.)
-        {
-            Fstar =FHLL(WLU, WRU); //FHLL(WLU, WRU, SUL, SUR);
-        }
+        if (SD >= 0.)
+        {           Fstar =FHLL(WLD, WRD);}
+        else if (SU <= 0.)
+        {            Fstar =FHLL(WLU, WRU);  }
     }
-
+#pragma omp barrier
     return {Fstar, Gstar};
 }
 
@@ -297,150 +297,153 @@ void Euler::Solve() {
 
     Etat FNW, FSW, FSE, FNE, GNW, GSW, GSE, GNE;
 
-#pragma omp parallel num_threads(8)
-#pragma omp parallel for collapse(2)
+
     for (unsigned it = 1; it < m_mesh.m_nx-1 ; it++) {
         for (unsigned j = 1; j < m_mesh.m_ny-1 ; ++j) {
+//--------------------------------------INTERNAL CELLS---------------------------------------------------------------
+//
 
-            switch (m_mesh.Primal[it][j].bord) {//-------INTERNAL CELLS-----
-
-                case 0:
-                    FNW = HLLMULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+            if(m_mesh.Primal[it][j].bord==0) {  //-------INTERNAL CELLS-----
+                    FNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
                                     m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).first;
 
-                    FSW = HLLMULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                    FSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
                                     m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).first;
 
-                    FSE = HLLMULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                    FSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
                                     m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).first;
 
-                    FNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+                    FNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
                                     m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).first;
 
-                    GNW = HLLMULTID(m_mesh.Primal[it-1][j].prev, m_mesh.Primal[it-1][j+1].prev,
-                                    m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j+1].prev).second;
-
-                    GSW = HLLMULTID(m_mesh.Primal[it-1][j-1].prev, m_mesh.Primal[it - 1][j].prev,
-                                    m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j].prev).second;
-                    GSE = HLLMULTID(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j].prev,
-                                    m_mesh.Primal[it+1][j-1].prev, m_mesh.Primal[it + 1][j].prev).second;
-                    GNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j+1].prev,
-                                    m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).second;
-
-
-                    m_mesh.Primal[it][j].FR =(1./6.)* (FNE + FSE)+(4./6.)*FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
-                    m_mesh.Primal[it][j].FL =(1./6.)* (FNW + FSW)+(4./6.)*FHLL(m_mesh.Primal[it-1][j].prev, m_mesh.Primal[it ][j].prev);;
-                    m_mesh.Primal[it][j].GU =(1./6.)* (GNW + GNE)+(4./6.)*GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
-                    m_mesh.Primal[it][j].GD =(1./6.)* (GSW + GSE)+(4./6.)*GHLL(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j].prev);
-
-
-//-----------------------------------------BOTTOM BORDER-------------------------------------------------------------
-                case 1:
-
-                    FNW = HLLMULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
-                                    m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).first;
-                    FNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
-                                    m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).first;
-                    GNW = HLLMULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+                    GNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
                                     m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).second;
-                    GNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+
+                    GSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                                    m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).second;
+                    GSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                                    m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).second;
+                    GNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
                                     m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).second;
 
-                    FSE = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
 
-                    FSW = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it + 1][j].prev);
+                    m_mesh.Primal[it][j].FR =
+                          (1./6.)* (FNE + FSE)+(4./6.)*FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
+                    m_mesh.Primal[it][j].FL =
+                            (1./6.)*(FNW + FSW)+(4./6.)*FHLL(m_mesh.Primal[it-1][j].prev, m_mesh.Primal[it ][j].prev);;
+                    m_mesh.Primal[it][j].GU =
+                            (1./6.)* (GNW + GNE)+(4./6.)*GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
+                    m_mesh.Primal[it][j].GD =
+                           (1./6.)*(GSW + GSE)+(4./6.)*GHLL(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j].prev);
 
-                    //-------------------
-                    m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
-                    m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
-                    m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
+                }
+//-----------------------------------------BOTTOM BORDER-------------------------------------------------------------
+           if(m_mesh.Primal[it][j].bord==1) {
 
-                    m_mesh.Primal[it][j].GD.rho =0.;
-                    m_mesh.Primal[it][j].GD.u =0.;
-                    m_mesh.Primal[it][j].GD.v =0.;
-                    m_mesh.Primal[it][j].GD.E =0.;
+                FNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+                                m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).first;
+                FNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+                                m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).first;
+                GNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+                                m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).second;
+                GNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+                                m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).second;
 
-//-------------------------------------------RIGHT BORDER-------------------------------------------------------------
-                case 2:
+                FSE = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
 
-                        FNW = HLLMULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
-                                        m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).first;
-                        FSW = HLLMULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
-                                        m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).first;
+                FSW = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it + 1][j].prev);
 
-                        GNW = HLLMULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
-                                        m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).second;
-                        GSW = HLLMULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
-                                        m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).second;
+                //-------------------
+                m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
+                m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
+                m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
 
-                        GSE = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
-
-
-                        GNE = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
-
-                        m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
-                        m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
-                        m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
-
-                        m_mesh.Primal[it][j].FR.rho =0.;
-                        m_mesh.Primal[it][j].FR.u =0.;
-                        m_mesh.Primal[it][j].FR.v =0.;
-                        m_mesh.Primal[it][j].FR.E =0.;
-
-                    //--------------------------------------------TOP BORDER-------------------------------------------------------------
-                case 3:
-
-                        FSW = HLLMULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
-                                        m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).first;
-                        FSE = HLLMULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
-                                        m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).first;
-
-                        GSW = HLLMULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
-                                        m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).second;
-                        GSE = HLLMULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
-                                        m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).second;
-
-                        FNW = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
-
-                        FNE = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
-
-                        m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
-                        m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
-                        m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
-
-                        m_mesh.Primal[it][j].GU.rho =0.;
-                        m_mesh.Primal[it][j].GU.u =0.;
-                        m_mesh.Primal[it][j].GU.v =0.;
-                        m_mesh.Primal[it][j].GU.E =0.;
-
-                    //-------------------------------------------LEFT BORDER-------------------------------------------------------------
-                case 4:
-
-                        FSE = HLLMULTID(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j].prev,
-                                        m_mesh.Primal[it+1][j-1].prev, m_mesh.Primal[it + 1][j].prev).first;
-                        FNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
-                                        m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).first;
-
-
-                        GSE = HLLMULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
-                                        m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).second;
-                        GNE = HLLMULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
-                                        m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).second;
-                        GNW = GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
-
-                        GSW = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
-
-                        m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
-                        m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
-                        m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
-
-
-                        m_mesh.Primal[it][j].FL.rho =0.;
-                        m_mesh.Primal[it][j].FL.u =0.;
-                        m_mesh.Primal[it][j].FL.v =0.;
-                        m_mesh.Primal[it][j].FL.E =0.;
-
+                m_mesh.Primal[it][j].GD.rho = 0.;
+                m_mesh.Primal[it][j].GD.u = 0.;
+                m_mesh.Primal[it][j].GD.v = 0.;
+                m_mesh.Primal[it][j].GD.E = 0.;
             }
+//-------------------------------------------RIGHT BORDER------------------------------------------------------------
+            if(m_mesh.Primal[it][j].bord==2) {
+
+                    FNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+                                    m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).first;
+                    FSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                                    m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).first;
+
+                    GNW = HLL_MULTID(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it - 1][j + 1].prev,
+                                    m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev).second;
+                    GSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                                    m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).second;
+
+                    GSE = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
+
+
+                    GNE = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
+
+                    m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
+                    m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
+                    m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
+
+                    m_mesh.Primal[it][j].FR.rho = 0.;
+                    m_mesh.Primal[it][j].FR.u = 0.;
+                    m_mesh.Primal[it][j].FR.v = 0.;
+                    m_mesh.Primal[it][j].FR.E = 0.;
+                }
+//--------------------------------------------TOP BORDER-------------------------------------------------------------
+            if(m_mesh.Primal[it][j].bord==3) {
+
+                FSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                                m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).first;
+                FSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                                m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).first;
+
+                GSW = HLL_MULTID(m_mesh.Primal[it - 1][j - 1].prev, m_mesh.Primal[it - 1][j].prev,
+                                m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev).second;
+                GSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                                m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).second;
+
+                FNW = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
+
+                FNE = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
+
+                m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
+                m_mesh.Primal[it][j].FL = 0.25 * (FNW + FSW);
+                m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
+
+                m_mesh.Primal[it][j].GU.rho = 0.;
+                m_mesh.Primal[it][j].GU.u = 0.;
+                m_mesh.Primal[it][j].GU.v = 0.;
+                m_mesh.Primal[it][j].GU.E = 0.;
+            }
+//-------------------------------------------LEFT BORDER-------------------------------------------------------------
+            if(m_mesh.Primal[it][j].bord==4) {
+
+                FSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                                m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).first;
+                FNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+                                m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).first;
+
+
+                GSE = HLL_MULTID(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev,
+                                m_mesh.Primal[it + 1][j - 1].prev, m_mesh.Primal[it + 1][j].prev).second;
+                GNE = HLL_MULTID(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev,
+                                m_mesh.Primal[it + 1][j].prev, m_mesh.Primal[it + 1][j + 1].prev).second;
+                GNW = GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
+
+                GSW = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
+
+                m_mesh.Primal[it][j].FR = 0.25 * (FNE + FSE);
+                m_mesh.Primal[it][j].GU = 0.25 * (GNW + GNE);
+                m_mesh.Primal[it][j].GD = 0.25 * (GSW + GSE);
+
+
+                m_mesh.Primal[it][j].FL.rho = 0.;
+                m_mesh.Primal[it][j].FL.u = 0.;
+                m_mesh.Primal[it][j].FL.v = 0.;
+                m_mesh.Primal[it][j].FL.E = 0.;
+            }
+
         }
 
     }
@@ -450,38 +453,32 @@ void Euler::Solve() {
 
 
 void Euler::HLL_Solver(double time, int testcase) {
-alpha=0.5;
+alpha=0.4;
     Tmax = time;
     m_mesh.save(0,"hll");
 
- //   while (T < Tmax) {
-    dt = CFL();
-
+   while (T < Tmax) {
+   
+        Solve();
+        dt = CFL();
         if (dt == 0.) {
             std::cout << "space step " << m_mesh.getdx() << std::endl;
             std::cout << "time step " << dt << ' ' << T << std::endl;
            //break;
         }
-
-        Solve();
         Update();
-
-
         T += dt;
-
-
-  // }
+  }
 
     m_mesh.save(1,"hll");
 }
 
 double Euler::CFL() {
-    Wave.clear();
+    
     std::vector<double> tmp;
     double step;
     double   xmid,xmax,ymid,ymax;
 
-      //  alpha=0.125;
     for (unsigned it =0; it < m_mesh.m_nx-1; it++) {
         for (unsigned j =0; j < m_mesh.m_ny-1; j++) {
 
@@ -499,6 +496,7 @@ double Euler::CFL() {
 
     const auto max = std::max_element(begin(Wave), end(Wave));
     step =alpha*m_mesh.getdx() / *max;
+    Wave.clear();
     return step;
 }
 
@@ -523,7 +521,7 @@ void Euler::Bord() {
 //---------------------------------------------------------------------------------------------------------------------
 
 void Euler::HLL_SPLIT(double time, int testcase) {
-alpha=0.15;
+alpha=0.25;
 
     Tmax = time;
     m_mesh.save(0,"split_hll");
@@ -535,77 +533,69 @@ alpha=0.15;
             std::cout << "time step NUL "  << " Current Time " << T << "  space step " << m_mesh.getdx() <<std::endl;
            break;
         }
-
-
-        for (unsigned it = 1; it < m_mesh.m_nx-1 ; ++it) {
+#pragma omp parallel num_threads(8)
+#pragma omp parallel for collapse(2) schedule(dynamic)
+       for (unsigned it = 1; it < m_mesh.m_nx-1 ; ++it) {
             for (unsigned j = 1; j < m_mesh.m_ny-1 ; ++j) {
-                switch (m_mesh.Primal[it][j].bord) {
-                    case 0:
-                        //---------------------------------------INTERNAL CELLS-----------------------------------------
-                        m_mesh.Primal[it][j].FR =(4./6.)*FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev)
-                        +(1./6.)*FHLL(m_mesh.Primal[it][j+1].prev, m_mesh.Primal[it + 1][j+1].prev)
-                        +(1./6.)*FHLL(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it + 1][j-1].prev);
 
-                        m_mesh.Primal[it][j].FL =(4./6.)*FHLL(m_mesh.Primal[it-1][j].prev, m_mesh.Primal[it][j].prev)
-                       +(1./6.)*FHLL(m_mesh.Primal[it-1][j+1].prev, m_mesh.Primal[it ][j+1].prev)
-                       +(1./6.)*FHLL(m_mesh.Primal[it-1][j-1].prev, m_mesh.Primal[it ][j-1].prev);
+            if(m_mesh.Primal[it][j].bord==0) {
 
-                        m_mesh.Primal[it][j].GU =(4./6.)*GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev)
-                      +(1./6.)*GHLL(m_mesh.Primal[it-1][j].prev, m_mesh.Primal[it-1][j + 1].prev)
-                      +(1./6.)*GHLL(m_mesh.Primal[it+1][j].prev, m_mesh.Primal[it+1][j + 1].prev);
+                //---------------------------------------INTERNAL CELLS-----------------------------------------
+                m_mesh.Primal[it][j].FR =FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
+                m_mesh.Primal[it][j].FL =FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
+                m_mesh.Primal[it][j].GU = GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
+                m_mesh.Primal[it][j].GD = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
 
-
-                        m_mesh.Primal[it][j].GD =(4./6.)*GHLL(m_mesh.Primal[it][j-1].prev, m_mesh.Primal[it][j ].prev)
-                       +(1./6.)*GHLL(m_mesh.Primal[it-1][j-1].prev, m_mesh.Primal[it-1][j ].prev)
-                      +(1./6.)*GHLL(m_mesh.Primal[it+1][j-1].prev, m_mesh.Primal[it+1][j].prev);
+            }
 
                         //-----------------------------------------BOTTOM BORDER-------------------------------------------------------------
-                    case 1:
-                        m_mesh.Primal[it][j].FR = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
-                        m_mesh.Primal[it][j].FL = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it ][j].prev);
+            else if(m_mesh.Primal[it][j].bord==1) {
+                m_mesh.Primal[it][j].FR = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
+                m_mesh.Primal[it][j].FL = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
 
-                        m_mesh.Primal[it][j].GU.rho =0.;
-                        m_mesh.Primal[it][j].GU.u =0.;
-                        m_mesh.Primal[it][j].GU.v =0.;
-                        m_mesh.Primal[it][j].GU.E =0.;
+                m_mesh.Primal[it][j].GU.rho = 0.;
+                m_mesh.Primal[it][j].GU.u = 0.;
+                m_mesh.Primal[it][j].GU.v = 0.;
+                m_mesh.Primal[it][j].GU.E = 0.;
 
-                        m_mesh.Primal[it][j].GD.rho =0.;
-                        m_mesh.Primal[it][j].GD.u =0.;
-                        m_mesh.Primal[it][j].GD.v =0.;
-                        m_mesh.Primal[it][j].GD.E =0.;
-
+                m_mesh.Primal[it][j].GD.rho = 0.;
+                m_mesh.Primal[it][j].GD.u = 0.;
+                m_mesh.Primal[it][j].GD.v = 0.;
+                m_mesh.Primal[it][j].GD.E = 0.;
+            }
                         //-------------------------------------------RIGHT BORDER---------------------------------------
-                    case 2:
-                        m_mesh.Primal[it][j].GU = GHLL(m_mesh.Primal[it][j ].prev, m_mesh.Primal[it][j+1].prev);
-                        m_mesh.Primal[it][j].GD = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
+            else if(m_mesh.Primal[it][j].bord==2) {
+                m_mesh.Primal[it][j].GU = GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
+                m_mesh.Primal[it][j].GD = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
 
-                        m_mesh.Primal[it][j].FR.rho =0.;
-                        m_mesh.Primal[it][j].FR.u =0.;
-                        m_mesh.Primal[it][j].FR.v =0.;
-                        m_mesh.Primal[it][j].FR.E =0.;
+                m_mesh.Primal[it][j].FR.rho = 0.;
+                m_mesh.Primal[it][j].FR.u = 0.;
+                m_mesh.Primal[it][j].FR.v = 0.;
+                m_mesh.Primal[it][j].FR.E = 0.;
 
-                        m_mesh.Primal[it][j].FL.rho =0.;
-                        m_mesh.Primal[it][j].FL.u =0.;
-                        m_mesh.Primal[it][j].FL.v =0.;
-                        m_mesh.Primal[it][j].FL.E =0.;
+                m_mesh.Primal[it][j].FL.rho = 0.;
+                m_mesh.Primal[it][j].FL.u = 0.;
+                m_mesh.Primal[it][j].FL.v = 0.;
+                m_mesh.Primal[it][j].FL.E = 0.;
+            }
 
                         //--------------------------------------------TOP BORDER----------------------------------------
-                    case 3:
-                        m_mesh.Primal[it][j].FR = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
-                        m_mesh.Primal[it][j].FL = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
+            else if(m_mesh.Primal[it][j].bord==3) {
+                m_mesh.Primal[it][j].FR = FHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it + 1][j].prev);
+                m_mesh.Primal[it][j].FL = FHLL(m_mesh.Primal[it - 1][j].prev, m_mesh.Primal[it][j].prev);
 
-                        m_mesh.Primal[it][j].GU.rho =0.;
-                        m_mesh.Primal[it][j].GU.u =0.;
-                        m_mesh.Primal[it][j].GU.v =0.;
-                        m_mesh.Primal[it][j].GU.E =0.;
+                m_mesh.Primal[it][j].GU.rho = 0.;
+                m_mesh.Primal[it][j].GU.u = 0.;
+                m_mesh.Primal[it][j].GU.v = 0.;
+                m_mesh.Primal[it][j].GU.E = 0.;
 
-                        m_mesh.Primal[it][j].GD.rho =0.;
-                        m_mesh.Primal[it][j].GD.u =0.;
-                        m_mesh.Primal[it][j].GD.v =0.;
-                        m_mesh.Primal[it][j].GD.E =0.;
-
+                m_mesh.Primal[it][j].GD.rho = 0.;
+                m_mesh.Primal[it][j].GD.u = 0.;
+                m_mesh.Primal[it][j].GD.v = 0.;
+                m_mesh.Primal[it][j].GD.E = 0.;
+            }
                         //-------------------------------------------LEFT BORDER----------------------------------------
-                    case 4:
+            else if(m_mesh.Primal[it][j].bord==4){
                         m_mesh.Primal[it][j].GU =GHLL(m_mesh.Primal[it][j].prev, m_mesh.Primal[it][j + 1].prev);
                         m_mesh.Primal[it][j].GD = GHLL(m_mesh.Primal[it][j - 1].prev, m_mesh.Primal[it][j].prev);
 
@@ -628,8 +618,6 @@ alpha=0.15;
 }
 
 //---------------------------------------------------------------------------------------------------------------------
-//                                            LAX FRIEDRIECH SOLVER-
-//---------------------------------------------------------------------------------------------------------------------
 
 void Euler::LF_Solver(double time, int testcase) {
 alpha=0.7;
@@ -644,7 +632,7 @@ alpha=0.7;
             //break;
         }
 
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(2) num_threads(8)
         for (unsigned it = 1; it < m_mesh.m_nx - 1; it++) {
             for (unsigned j = 1; j < m_mesh.m_ny - 1; ++j) {
                 m_mesh.Primal[it][j].FR = 0.25 * (F(m_mesh.Primal[it][j].prev) + F(m_mesh.Primal[it + 1][j].prev))
@@ -666,7 +654,7 @@ Update();
 //----------------------------------------------------------------------------------------------------------------------
 
 void Euler::UPWIND_Solver(double time, int testcase){
-    alpha=0.25;
+    alpha=0.5;
     Tmax = time;
     m_mesh.save(0,"upwind");
     while (T < Tmax) {
@@ -709,45 +697,12 @@ if(a*b<=0.) return 0.;
    else  return std::min(a,b);
 }
 //----------------------------------------------------------------------------------------------------------------------
-void Euler::Muscl() {
 
-    slope_x.resize(m_mesh.m_nx, std::vector<double>(m_mesh.m_ny));
-    slope_y.resize(m_mesh.m_nx, std::vector<double>(m_mesh.m_ny));
-
-#pragma omp parallel for collapse(2)
-    for (unsigned it = 1; it < m_mesh.m_nx - 1; it++) {
-        for (unsigned j = 1; j < m_mesh.m_ny - 1; j++) {
-
-            slope_x[it][j] = m_mesh.getdx()* 0.5 *minmod(m_mesh.Primal[it][j].prev.u -m_mesh.Primal[it - 1][j].prev.u ,
-                    m_mesh.Primal[it + 1][j].prev.u -m_mesh.Primal[it][j].prev.u );
-            slope_y[it][j] =m_mesh.getdy()*0.5 *minmod(m_mesh.Primal[it][j].prev.v -m_mesh.Primal[it - 1][j].prev.v,
-                                                       m_mesh.Primal[it + 1][j].prev.v -m_mesh.Primal[it][j].prev.v );
-        }
-    }
-
-
-#pragma omp parallel for collapse(2)
-    for (unsigned it = 1; it < m_mesh.m_nx-1 ; ++it) {
-        for (unsigned j = 1; j < m_mesh.m_ny-1 ; ++j) {
-
-                    m_mesh.Primal[it][j].FR =FHLL( (1.+slope_x[it][j])*m_mesh.Primal[it][j].prev, (1.-slope_x[it+1][j])*m_mesh.Primal[it+1][j].prev);
-
-                    m_mesh.Primal[it][j].FL =FHLL((1.+slope_x[it-1][j])*m_mesh.Primal[it-1][j].prev, (1.-slope_x[it][j])*m_mesh.Primal[it][j].prev);
-
-                    m_mesh.Primal[it][j].GU =GHLL((1.+slope_y[it][j])*m_mesh.Primal[it][j].prev, (1.-slope_x[it][j+1])*m_mesh.Primal[it][j+1].prev);
-
-                    m_mesh.Primal[it][j].GD =GHLL((1.+slope_y[it][j-1])*m_mesh.Primal[it][j-1].prev, (1.-slope_x[it][j])*m_mesh.Primal[it][j].prev);
-        }
-    }
-
-
-
-}
 //----------------------------------------------------------------------------------------------------------------------
 void Euler::Update(){
 
-#pragma omp parallel for collapse(2)
-    for (unsigned it =1; it < m_mesh.m_nx-1 ; it++) {
+#pragma omp parallel for collapse(2) num_threads(8)
+    for (unsigned it =1; it < m_mesh.m_nx-1 ; ++it) {
         for (unsigned j = 1; j < m_mesh.m_ny-1; ++j) {
 
                     m_mesh.Primal[it][j].next = m_mesh.Primal[it][j].prev
@@ -755,12 +710,13 @@ void Euler::Update(){
                             -dt / m_mesh.getdy() *(m_mesh.Primal[it][j].GU - m_mesh.Primal[it][j].GD);
         }
     }
+ 
     Bord();
     Pressure();
 
 
 
-#pragma omp parallel for collapse(2)
+#pragma omp parallel for collapse(2) num_threads(8)
     for (unsigned it = 0; it < m_mesh.m_nx; it++) {
         for (unsigned j =0; j < m_mesh.m_ny; j++) {
             m_mesh.Primal[it][j].prev = m_mesh.Primal[it][j].next;
